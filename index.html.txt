@@ -1,0 +1,522 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Seviyeli Sembol Eşleştirme Oyunu</title>
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- Konfeti Kütüphanesi CDN -->
+    <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.9.3/dist/confetti.browser.min.js"></script>
+    
+    <script>
+        // Tema Renklerini Ayarla
+        let currentTheme = 'theme1';
+
+        const THEMES = {
+            theme1: {
+                primary: '#f59e0b', // Amber (Altın)
+                secondary: '#3b82f6', // Blue (Mavi)
+                darkbg: '#1f2937', // Gray 800
+                cardfront: '#3b82f6',
+                gridbg: '#4b5563', // Gray 600
+                movecolor: '#fde047', // Yellow 300
+            },
+            theme2: {
+                primary: '#10b981', // Emerald (Zümrüt)
+                secondary: '#8b5cf6', // Violet (Mor)
+                darkbg: '#171717', // Neutral 900
+                cardfront: '#8b5cf6',
+                gridbg: '#374151', // Gray 700
+                movecolor: '#a78bfa', // Violet 400
+            }
+        };
+
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['Inter', 'sans-serif'],
+                    },
+                    colors: {
+                        // Tailwind sınıflarını dinamik hale getirmek için mevcut tema renklerini kullanıyoruz
+                        primary: ({ opacityValue }) => THEMES[currentTheme].primary,
+                        secondary: ({ opacityValue }) => THEMES[currentTheme].secondary,
+                        darkbg: ({ opacityValue }) => THEMES[currentTheme].darkbg,
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        /* Kartın 3D çevirme animasyonu için özel CSS */
+        .card-inner {
+            width: 100%;
+            height: 100%;
+            text-align: center;
+            transition: transform 0.6s;
+            transform-style: preserve-3d;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.3);
+        }
+
+        .card.flipped .card-inner {
+            transform: rotateY(180deg);
+        }
+
+        .card-front, .card-back {
+            position: absolute;
+            width: 100%;
+            height: 100%;
+            -webkit-backface-visibility: hidden;
+            backface-visibility: hidden;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 0.75rem; /* rounded-xl */
+            padding: 4px;
+        }
+
+        /* Kart kapalıykenki dinamik renk */
+        .card-front {
+            background-color: var(--card-front-color); 
+            color: white;
+            font-size: 1.5rem;
+            cursor: pointer;
+            transition: transform 0.3s, box-shadow 0.3s;
+            font-weight: bold;
+        }
+        
+        /* Kart açıkkenki görünüm (sembol) */
+        .card-back {
+            background-color: white;
+            transform: rotateY(180deg);
+            color: #1f2937;
+            font-size: 2.5rem; /* Semboller için daha büyük */
+            font-weight: 700;
+            line-height: 1.2;
+            overflow: hidden;
+        }
+
+        .card:not(.matched):not(.flipped) .card-front:hover {
+            transform: scale(1.05);
+            box-shadow: 0 8px 16px rgba(0, 0, 0, 0.4);
+        }
+        
+        /* Eşleşen kartların stili */
+        .card.matched .card-inner {
+            opacity: 0.5;
+            pointer-events: none;
+            box-shadow: 0 0 10px var(--primary-color);
+        }
+
+        /* Mesaj Kutusu Stili */
+        #message-box {
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            z-index: 50;
+        }
+
+        /* Dinamik grid kolon ayarları */
+        #game-grid.grid-cols-4 {
+            grid-template-columns: repeat(4, minmax(0, 1fr));
+        }
+        #game-grid.grid-cols-8 {
+            grid-template-columns: repeat(8, minmax(0, 1fr));
+        }
+
+    </style>
+</head>
+<body class="font-sans min-h-screen flex items-center justify-center p-4 overflow-auto transition-colors duration-500" id="body-container">
+
+    <div class="w-full max-w-7xl p-6 rounded-3xl shadow-2xl space-y-6 transition-colors duration-500" id="main-container">
+        
+        <!-- Başlık ve Durum Çubuğu -->
+        <div class="text-center">
+            <h1 class="text-4xl font-extrabold transition-colors duration-500" id="game-title">Sembol Eşleştirme (Seviye 1)</h1>
+            <p class="text-gray-400 mt-1" id="level-info">4x4 Izgara | 8 Çift</p>
+        </div>
+
+        <!-- Skor/Durum Paneli -->
+        <div class="flex justify-between items-center text-white bg-gray-800 p-4 rounded-xl shadow-inner transition-colors duration-500">
+            <div id="moves" class="text-center">
+                <div class="text-2xl font-bold" id="moves-display">0</div>
+                <div class="text-sm text-gray-400">Hamle</div>
+            </div>
+            <div id="time" class="text-center">
+                <div class="text-2xl font-bold text-secondary" id="time-display">0s</div>
+                <div class="text-sm text-gray-400">Süre</div>
+            </div>
+            <button id="reset-button" class="text-white font-bold py-2 px-4 rounded-full transition-all duration-200 shadow-lg active:scale-95" style="background-color: var(--primary-color);">
+                Yeniden Başla
+            </button>
+        </div>
+
+        <!-- Kart Izgarası -->
+        <div id="game-grid" class="grid gap-3 md:gap-4 p-2 rounded-xl transition-colors duration-500">
+            <!-- Kartlar buraya JavaScript ile eklenecek -->
+        </div>
+
+    </div>
+
+    <!-- Oyun Bitti Mesaj Kutusu (Modal) -->
+    <div id="message-box" class="fixed hidden p-8 bg-gray-800 rounded-2xl shadow-2xl text-center border-4 transition-colors duration-500">
+        <h2 id="message-title" class="text-3xl font-bold mb-4 transition-colors duration-500"></h2>
+        <p id="message-text" class="text-white text-lg mb-6"></p>
+        <button id="modal-action-button" class="px-6 py-3 text-white text-lg font-bold rounded-xl shadow-lg hover:brightness-110 transition-colors active:scale-95" style="background-color: var(--secondary-color);">
+            Sonraki Seviyeye Geç
+        </button>
+    </div>
+
+    <script>
+        // DOM Elementleri
+        const bodyContainer = document.getElementById('body-container');
+        const mainContainer = document.getElementById('main-container');
+        const gameTitle = document.getElementById('game-title');
+        const levelInfo = document.getElementById('level-info');
+        const gameGrid = document.getElementById('game-grid');
+        const movesDisplay = document.getElementById('moves-display');
+        const timeDisplay = document.getElementById('time-display');
+        const resetButton = document.getElementById('reset-button');
+        const messageBox = document.getElementById('message-box');
+        const messageTitle = document.getElementById('message-title');
+        const messageText = document.getElementById('message-text');
+        const modalActionButton = document.getElementById('modal-action-button');
+
+        // Oyun Ayarları
+        const ALL_SYMBOLS = [
+            '♈', '♉', '♊', '♋', '♌', '♍', '♎', '♏', // 8 Zodiac
+            '⚕️', '🔱', '⚛️', '☯️', '☦️', '☪️', '✝️', '☸️', // 8 Religious/Ancient
+            '👑', '🔑', '⚔️', '🛡️', '🔔', '🏺', '⚖️', '🧭', // 8 Antiques
+            '🔥', '💧', '🌿', '⛰️', '🌙', '⭐', '☀️', '☁️', // 8 Nature
+            '💡', '🕰️', '📜', '🖋️', '🔬', '⚙️', '🔗', '🔮', // 8 Objects
+            '🌀', '🛑', '💯', '⁉️', '⚜️', '⚚', '⚝', '✢', // 8 Misc
+            '⚔️', '⚗️', '🜁', '🜃', '🜄', '🜀', '🜋', '🜎', // 8 Alchemy
+            '🜏', '🜓', '🜔', '🜕', '🜖', '🜗', '🜘', '🜚'  // 8 More Alchemy
+        ]; // Toplam 64 benzersiz sembol (32 çifte ihtiyacımız var)
+
+        const LEVEL_SETTINGS = {
+            1: { pairs: 8, gridSize: 4, theme: 'theme1', maxSymbols: 8 }, // 4x4
+            2: { pairs: 32, gridSize: 8, theme: 'theme2', maxSymbols: 32 } // 8x8
+        };
+        
+        // Oyun Durumu
+        let currentLevel = 1;
+        let cards = [];
+        let flippedCards = [];
+        let matchedPairs = 0;
+        let moves = 0;
+        let timer = null;
+        let timeElapsed = 0;
+        let waiting = false; 
+        let lastMatchTime = 0; // Son eşleşme zamanını tutmak için
+
+        // --- TEMA VE STİL YÖNETİMİ ---
+        const applyTheme = (themeName) => {
+            currentTheme = themeName; // Güncel temayı da güncelleyelim
+            const theme = THEMES[themeName];
+            
+            // CSS Değişkenlerini Güncelle (Stil içindeki elementler için)
+            document.documentElement.style.setProperty('--primary-color', theme.primary);
+            document.documentElement.style.setProperty('--secondary-color', theme.secondary);
+            document.documentElement.style.setProperty('--card-front-color', theme.cardfront);
+
+            // Tailwind Sınıflarını Güncelle (Ana elementler için)
+            bodyContainer.className = `font-sans min-h-screen flex items-center justify-center p-4 overflow-auto transition-colors duration-500 bg-[${theme.darkbg}]`;
+            mainContainer.className = `w-full max-w-7xl p-6 rounded-3xl shadow-2xl space-y-6 transition-colors duration-500 bg-[${theme.darkbg}]`;
+            gameGrid.style.backgroundColor = theme.gridbg;
+            
+            // Özel Renkli Elementleri Güncelle
+            movesDisplay.style.color = theme.movecolor;
+            gameTitle.style.color = theme.primary;
+            modalActionButton.style.backgroundColor = theme.secondary;
+            resetButton.style.backgroundColor = theme.primary;
+            
+            // Modal çerçeve rengini güncelle
+            messageBox.style.borderColor = theme.primary;
+            document.getElementById('message-title').style.color = theme.primary;
+
+            // Arka plan rengini en sonda ayarlıyoruz ki geçiş görülebilsin
+            bodyContainer.classList.remove('bg-gray-900', 'bg-neutral-900');
+            bodyContainer.classList.add(themeName === 'theme1' ? 'bg-gray-900' : 'bg-neutral-900');
+        };
+
+        // Rastgele karıştırma fonksiyonu (Fisher-Yates)
+        const shuffle = (array) => {
+            for (let i = array.length - 1; i > 0; i--) {
+                const j = Math.floor(Math.random() * (i + 1));
+                [array[i], array[j]] = [array[j], array[i]];
+            }
+            return array;
+        };
+
+        // --- KONFETİ EFEKTİ ---
+        const triggerConfetti = (isFastMatch) => {
+            const theme = THEMES[currentTheme];
+            const colors = [theme.primary, theme.secondary, '#FFFFFF'];
+            
+            // Konfeti fırlatma parametreleri
+            const baseParams = {
+                particleCount: isFastMatch ? 150 : 70, // Hızlı eşleşmede daha çok konfeti
+                spread: isFastMatch ? 80 : 50,
+                origin: { y: 0.6 },
+                colors: colors,
+                disableForReducedMotion: true
+            };
+            
+            // Konfeti Patlaması 1 (Hafif Sol)
+            confetti({
+                ...baseParams,
+                angle: 60,
+                startVelocity: isFastMatch ? 50 : 35,
+                origin: { x: 0.3 }
+            });
+            
+            // Konfeti Patlaması 2 (Hafif Sağ)
+            confetti({
+                ...baseParams,
+                angle: 120,
+                startVelocity: isFastMatch ? 50 : 35,
+                origin: { x: 0.7 }
+            });
+
+            if (isFastMatch) {
+                // Ekstra büyük patlama (merkez)
+                 confetti({
+                    ...baseParams,
+                    particleCount: 200,
+                    spread: 360,
+                    ticks: 100,
+                    gravity: 0.5,
+                    decay: 0.94,
+                    startVelocity: 60,
+                    scalar: 1.5,
+                    shapes: ['star', 'circle'],
+                    origin: { y: 0.4, x: 0.5 }
+                });
+            }
+        };
+
+
+        // --- OYUN BAŞLATMA VE SEVİYE YÖNETİMİ ---
+        const initializeGame = () => {
+            const settings = LEVEL_SETTINGS[currentLevel];
+
+            // 1. Tema Uygulama
+            applyTheme(settings.theme);
+
+            // 2. Durum Sıfırlama
+            cards = [];
+            flippedCards = [];
+            matchedPairs = 0;
+            moves = 0;
+            timeElapsed = 0;
+            waiting = false;
+            lastMatchTime = 0; // Son eşleşme zamanını sıfırla
+            
+            clearInterval(timer);
+            timer = null;
+
+            // 3. UI Güncelleme ve Sıfırlama
+            movesDisplay.textContent = moves;
+            timeDisplay.textContent = timeElapsed + 's';
+            gameGrid.innerHTML = '';
+            messageBox.classList.add('hidden');
+            gameTitle.textContent = `Sembol Eşleştirme (Seviye ${currentLevel})`;
+            levelInfo.textContent = `${settings.gridSize}x${settings.gridSize} Izgara | ${settings.pairs} Çift`;
+
+            // 4. Izgara Boyutunu Ayarla
+            gameGrid.classList.remove('grid-cols-4', 'grid-cols-8');
+            gameGrid.classList.add(`grid-cols-${settings.gridSize}`);
+
+            // 5. Kart Verilerini Oluşturma
+            const selectedSymbols = ALL_SYMBOLS.slice(0, settings.maxSymbols); 
+            const gameSymbols = shuffle([...selectedSymbols, ...selectedSymbols]); 
+            
+            // 6. Kart Elementlerini Oluştur ve Ekle
+            gameSymbols.forEach((symbol, index) => {
+                const cardElement = createCardElement(symbol, index, settings.gridSize);
+                gameGrid.appendChild(cardElement);
+                cards.push({ id: index, symbol: symbol, element: cardElement, isFlipped: false, isMatched: false });
+            });
+            
+            // 7. Zamanlayıcıyı Başlat
+            startTimer();
+        };
+
+        // Kart elementini oluşturma
+        const createCardElement = (symbol, id, gridSize) => {
+            const card = document.createElement('div');
+            // 8x8 için kartları biraz daha küçük yapıyoruz
+            const sizeClass = gridSize === 8 ? 'text-2xl' : 'text-3xl'; 
+            
+            card.className = `card aspect-square relative perspective-[1000px] cursor-pointer rounded-xl ${sizeClass}`;
+            card.dataset.id = id;
+            card.onclick = handleCardClick;
+
+            card.innerHTML = `
+                <div class="card-inner">
+                    <div class="card-front text-xl font-bold shadow-lg flex-col">
+                        <span class="text-3xl">?</span>
+                    </div>
+                    <div class="card-back bg-white shadow-lg flex-col p-1">
+                        <span class="block text-center select-none">${symbol}</span>
+                    </div>
+                </div>
+            `;
+            return card;
+        };
+
+        // Zamanlayıcıyı başlatma
+        const startTimer = () => {
+            if (timer) return; 
+            timer = setInterval(() => {
+                timeElapsed++;
+                timeDisplay.textContent = timeElapsed + 's';
+            }, 1000);
+        };
+
+        // Kart tıklama olayı yöneticisi
+        const handleCardClick = (event) => {
+            const cardElement = event.currentTarget;
+            const cardId = parseInt(cardElement.dataset.id);
+            const cardData = cards.find(c => c.id === cardId);
+
+            if (waiting || cardData.isMatched || cardData.isFlipped) {
+                return;
+            }
+
+            flipCard(cardData);
+            flippedCards.push(cardData);
+
+            if (flippedCards.length === 2) {
+                moves++;
+                movesDisplay.textContent = moves;
+                waiting = true;
+                checkForMatch();
+            }
+        };
+
+        // Kartı çevir görseli ve verisi
+        const flipCard = (cardData) => {
+            cardData.isFlipped = true;
+            cardData.element.classList.add('flipped');
+        };
+        
+        // Kartı geri çevir görseli ve verisi
+        const unflipCard = (cardData) => {
+            cardData.isFlipped = false;
+            cardData.element.classList.remove('flipped');
+        };
+
+        // Eşleşme kontrolü
+        const checkForMatch = () => {
+            const [card1, card2] = flippedCards;
+            
+            // Kart çevirme başlangıç zamanı (ms)
+            const currentTime = Date.now(); 
+            // Bu, iki kartın çevrilmesi arasındaki (yaklaşık) süredir
+            // İlk kart çevrildiğinde lastMatchTime henüz güncellenmediği için, 
+            // ilk hamlede zaman farkı büyük çıkacaktır, bu normaldir.
+
+            if (card1.symbol === card2.symbol) {
+                // Eşleşti!
+                setTimeout(() => {
+                    card1.isMatched = true;
+                    card2.isMatched = true;
+                    card1.element.classList.add('matched');
+                    card2.element.classList.add('matched');
+                    matchedPairs++;
+                    
+                    // Hız kontrolü: Hızlı eşleşme (örneğin 2 saniyenin altı)
+                    // İlk eşleşme için bu kontrolü atlarız (lastMatchTime 0'dır)
+                    let isFastMatch = false;
+                    if (lastMatchTime !== 0) {
+                        const timeDifference = currentTime - lastMatchTime; // ms cinsinden fark
+                        // 2 saniye (2000 ms) altında eşleşme hızlı sayılır.
+                        if (timeDifference < 2000) { 
+                            isFastMatch = true;
+                        }
+                    }
+                    
+                    // Konfeti efektini tetikle
+                    triggerConfetti(isFastMatch); 
+
+                    // Son eşleşme zamanını güncelle
+                    lastMatchTime = currentTime; 
+
+                    flippedCards = [];
+                    waiting = false;
+
+                    if (matchedPairs === LEVEL_SETTINGS[currentLevel].pairs) {
+                        gameOver();
+                    }
+                }, 500);
+            } else {
+                // Eşleşmedi, kartları geri çevir
+                setTimeout(() => {
+                    unflipCard(card1);
+                    unflipCard(card2);
+                    
+                    flippedCards = [];
+                    waiting = false;
+                }, 1000); // 1 saniye sonra geri çevir
+            }
+        };
+
+        // Oyun Bitti
+        const gameOver = () => {
+            clearInterval(timer);
+            
+            // Oyun bittiğinde büyük bir konfeti patlaması
+            confetti({
+                particleCount: 400,
+                spread: 360,
+                ticks: 150,
+                gravity: 0.5,
+                decay: 0.94,
+                startVelocity: 60,
+                scalar: 2.0,
+                shapes: ['star', 'circle', 'square'],
+                origin: { y: 0.5, x: 0.5 },
+                colors: [THEMES[currentTheme].primary, THEMES[currentLevel].secondary, '#FFFFFF', '#FFD700']
+            });
+            
+            if (currentLevel < Object.keys(LEVEL_SETTINGS).length) {
+                // Seviye Atlama
+                messageTitle.textContent = 'Seviye Tamamlandı!';
+                messageText.textContent = `${moves} hamle ve ${timeElapsed} saniyede Seviye ${currentLevel}'ı bitirdin. Şimdi 8x8 ızgaraya geçelim!`;
+                modalActionButton.textContent = 'Sonraki Seviyeye Geç';
+                modalActionButton.onclick = nextLevel;
+            } else {
+                // Son Seviye Bitti
+                messageTitle.textContent = 'Tebrikler! Oyunu Bitirdin!';
+                messageText.textContent = `Tüm seviyeleri başarıyla tamamladın! Toplam süren: ${timeElapsed} saniye.`;
+                modalActionButton.textContent = 'Tekrar Oyna (Seviye 1)';
+                modalActionButton.onclick = () => { currentLevel = 1; initializeGame(); };
+            }
+            
+            messageBox.classList.remove('hidden');
+        };
+        
+        // Sonraki Seviyeye Geçiş
+        const nextLevel = () => {
+            currentLevel++;
+            initializeGame();
+        };
+
+
+        // Olay dinleyicilerini tanımla
+        resetButton.addEventListener('click', () => { currentLevel = 1; initializeGame(); });
+
+        // Sayfa yüklendiğinde oyunu başlat
+        window.onload = () => {
+             // Tailwind'in dinamik renkleri kullanabilmesi için ilk tema uygulanır
+             applyTheme(LEVEL_SETTINGS[currentLevel].theme); 
+             initializeGame();
+        };
+
+    </script>
+</body>
+</html>
